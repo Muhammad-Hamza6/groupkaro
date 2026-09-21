@@ -1,0 +1,85 @@
+name: groupkaro
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: groupkaro_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: groupkaro
+      POSTGRES_USER: groupkaro
+      POSTGRES_PASSWORD: groupkaro_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - groupkaro_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U groupkaro -d groupkaro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: groupkaro_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - groupkaro_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: groupkaro_api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override the hostname in DATABASE_URL — the api container talks to
+      # the postgres container by service name, not localhost.
+      DATABASE_URL: postgres://groupkaro:groupkaro_dev_password@postgres:5432/groupkaro
+      REDIS_URL: redis://redis:6379/0
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,api
+      DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python manage.py runserver 0.0.0.0:8000
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: groupkaro_web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules          # <-- anonymous volume: preserves container's node_modules
+      - /app/.next                 # <-- preserves container's .next
+    depends_on:
+      - api
+    command: npm run dev
+
+volumes:
+  groupkaro_pg_data:
+  groupkaro_redis_data:
+  groupkaro_web_node_modules:
+  groupkaro_web_next:
