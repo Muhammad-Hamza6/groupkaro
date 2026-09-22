@@ -95,7 +95,7 @@ DATABASES["default"]["CONN_MAX_AGE"] = 60
 
 # --- Auth -------------------------------------------------------------------
 # Replace with a custom User model in F0-3 before writing any auth code.
-AUTH_USER_MODEL = "auth.User"
+AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
