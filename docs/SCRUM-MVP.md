@@ -90,11 +90,21 @@ Story ID format: `EPIC-n`. Each: **statement · acceptance criteria · points ·
 - **8 · Must · deps: F0-2**
 - Tasks: model all tables (Django models) · migrations · GIN indexes · `manage.py seed` command · doc.
 
-**F0-4 · Phone-OTP auth + JWT** — *residents/vendors sign in by phone, no passwords.*
-- **AC:** send OTP (hashed, expiring, attempt-capped) → verify → JWT + refresh (`djangorestframework-simplejwt`); resend throttled (DRF throttle classes); expired/invalid handled; SMS adapter is pluggable (console-logs in dev).
-- **8 · Must · deps: F0-3**
-- Tasks: otp send/verify views · SMS gateway adapter · SimpleJWT issue/refresh wiring · DRF throttle config · tests (pytest-django).
+**F0-4 · Hybrid auth: register (phone-OTP) + login (username/password) + JWT**
+*As a user I verify my phone once at signup, then log in cheaply with username + password.*
 
+- **AC:**
+  - `POST /auth/register/start` → send OTP (hashed, expiring, attempt-capped) to phone
+  - `POST /auth/register/verify` → verify OTP, then create User with `username`, `password`, `full_name`, verified `phone` → issue JWT
+  - `POST /auth/login` → accept `username` + `password`, return JWT + refresh
+  - `POST /auth/refresh` → rotate access token
+  - `POST /auth/password-reset/start` → send OTP to phone
+  - `POST /auth/password-reset/verify` → verify OTP, set new password
+  - Password validators: Django defaults (8+ chars, not common, not all digits, not similar to user attributes)
+  - OTP resend throttled; expired/invalid OTP handled gracefully
+  - SMS adapter is pluggable (console-logs in dev; real gateway in staging)
+  - `python manage.py createsuperuser` bypasses OTP (trusted operator)
+- **8 · Must · deps: F0-3**
 **F0-5 · RBAC + society scoping middleware** — *the wrong role/society can't touch the wrong data.*
 - **AC:** role guard (admin/resident/vendor) as a DRF permission class; residents see only their own society (queryset scoping); 403 on violation; allow/deny matrix unit-tested.
 - **5 · Must · deps: F0-4**

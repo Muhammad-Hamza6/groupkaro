@@ -132,7 +132,10 @@ Holding residents' money and paying it out to vendors is **not** something a nor
 - **Payout timing `[V2]`:** T+2 after admin release, giving a dispute window.
 - **Currency:** all amounts PKR, stored as `DECIMAL(12,2)`.
 - **Per-unit pricing:** a "flat" is not one AC. Price is **per serviceable unit** (per AC), captured when a resident joins (how many ACs), not per household. This fixes the biggest hidden pricing bug — see §9.
-
+- **Phone verification:** every user's phone is verified **once at signup** via OTP.
+  Routine login uses username + password; OTP is reused only for password reset
+  and (later) sensitive account changes. This keeps SMS costs low and phone
+  trust high.
 ---
 
 ## 7. Trust & safety (a stranger enters someone's home)
@@ -187,14 +190,19 @@ Full corrected schema below. **Fixes applied vs the original v1 are listed at th
 -- USERS
 users (
   id            UUID PK,
-  phone         VARCHAR(20) UNIQUE NOT NULL,
+  username      VARCHAR(150) UNIQUE NOT NULL,          -- login identifier
+  phone         VARCHAR(20) UNIQUE NOT NULL,           -- verified once via OTP at signup
+  password      VARCHAR(255) NOT NULL,                 -- Django password hash
   full_name     VARCHAR(255) NOT NULL,
   email         VARCHAR(255),
   role          VARCHAR(30) NOT NULL CHECK (role IN ('main_admin','society_admin','resident','vendor')),
-  society_id    UUID NULL REFERENCES societies(id),   -- nullable: breaks the society<->user cycle
+  society_id    UUID NULL REFERENCES societies(id),    -- nullable: breaks the society<->user cycle
   flat_no       VARCHAR(20),
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  is_staff      BOOLEAN NOT NULL DEFAULT FALSE,        -- for Django admin access
+  is_superuser  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 )
 
 -- OTP (was missing entirely; phone-OTP auth needs it)
@@ -364,9 +372,12 @@ All under `/api/v1`, JWT in `Authorization: Bearer`. **`[MVP]`** endpoints marke
 
 ```
 AUTH
-  POST /auth/otp/send            send OTP to phone                         [MVP]
-  POST /auth/otp/verify          verify OTP → JWT (+ refresh)              [MVP]
-  POST /auth/refresh             refresh token                            [MVP]
+  POST /auth/register/start      send OTP to phone for signup              [MVP]
+  POST /auth/register/verify     verify OTP + create user (username, pw)   [MVP]
+  POST /auth/login               username + password → JWT (+ refresh)     [MVP]
+  POST /auth/refresh             refresh token                             [MVP]
+  POST /auth/password-reset/start   send OTP for reset                    [MVP]
+  POST /auth/password-reset/verify  verify OTP + set new password          [MVP]
 
 ADMIN / OPERATOR
   POST   /admin/societies              register society + its admin        [V2] (MVP seeds one by hand)
